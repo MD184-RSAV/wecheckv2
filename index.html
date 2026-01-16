@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeCheck - SAV National</title>
+    <style>
+        :root { --primary: #0056b3; --accent: #ffd700; --bg: #f4f6f9; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        h1 { text-align: center; color: var(--primary); margin-bottom: 5px; }
+        select, input { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; box-sizing: border-box; margin-bottom: 10px; }
+        button { width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+        .store-header { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid var(--primary); display: flex; justify-content: space-between; align-items: center; }
+        .store-name { font-weight: bold; font-size: 1.1rem; color: #2c3e50; }
+        .change-store { font-size: 0.8rem; text-decoration: underline; color: #666; cursor: pointer; }
+        #resultat { display: none; border-top: 5px solid #28a745; animation: slideIn 0.3s ease-out; }
+        .action-box { font-size: 1.2rem; font-weight: 800; color: #2c3e50; margin: 15px 0; background: #e8f5e9; padding: 15px; border-radius: 8px; text-align: center; }
+        .info-row { display: flex; align-items: center; margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 6px; }
+        .icon { font-size: 1.5rem; margin-right: 15px; }
+        .weight-options { display: flex; gap: 10px; margin-top: 10px; }
+        .weight-btn { flex: 1; padding: 15px; border: 2px solid #ddd; border-radius: 8px; background: white; cursor: pointer; font-weight: bold; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>WeCheck <span style="font-size:0.5em; background:var(--accent); padding:2px 6px; border-radius:4px;">PRO</span></h1>
+    <div id="loader" style="text-align:center; padding:20px;">⏳ Connexion à la base de données...</div>
+
+    <div id="setupScreen" class="card" style="display:none;">
+        <h2>📍 Configuration Magasin</h2>
+        <p>Sélectionnez votre magasin :</p>
+        <select id="selectMagasinConfig"></select>
+        <button onclick="saveMagasin()">Valider</button>
+    </div>
+
+    <div id="appScreen" style="display:none;">
+        <div class="store-header">
+            <div><div style="font-size:0.8rem; color:#888;">MAGASIN</div><div class="store-name" id="displayStoreName"></div></div>
+            <div class="change-store" onclick="resetMagasin()">Changer</div>
+        </div>
+
+        <div class="card">
+            <label>🔎 <b>Marque du produit :</b></label>
+            <select id="selectMarque"><option value="">-- Choisir une marque --</option></select>
+            <button onclick="startProcess()">Vérifier le process</button>
+        </div>
+
+        <div id="choixPoids" class="card" style="display:none; text-align:center;">
+            <h2>⚖️ Poids du colis</h2>
+            <div class="weight-options">
+                <button class="weight-btn" onclick="afficherResultatFinal('PETIT')">📦 -30 KG</button>
+                <button class="weight-btn" onclick="afficherResultatFinal('LOURD')">🚛 +30 KG</button>
+            </div>
+        </div>
+
+        <div id="resultat" class="card">
+            <h2 id="nomMarqueRes">Procédure</h2>
+            <div class="action-box" id="resAction"></div>
+            <div class="info-row"><div class="icon">🚚</div><div><b>Transporteur :</b><br><span id="resTransport"></span></div></div>
+            <div class="info-row" id="rowHotline"><div class="icon">📞</div><div><b>Hotline :</b><br><span id="resHotline"></span></div></div>
+            <button onclick="location.reload()" style="background:#666; margin-top:10px;">Nouvelle recherche</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const URL_MAGASINS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTjNaEwFSpDYb5LQIzqhIYuUTjxzyyU-86073JIHI-o4ksrfbb0t7SLV__YiaJZQ4tFk955Hfko9epH/pub?gid=1552475916&single=true&output=csv";
+    const URL_REGLES = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTjNaEwFSpDYb5LQIzqhIYuUTjxzyyU-86073JIHI-o4ksrfbb0t7SLV__YiaJZQ4tFk955Hfko9epH/pub?gid=1894491300&single=true&output=csv";
+
+    let DB_MAGASINS = [];
+    let DB_REGLES = {};
+    let MAG_INDEX = null;
+    let MARQUE_SEL = null;
+
+    async function init() {
+        try {
+            const [resM, resR] = await Promise.all([fetch(URL_MAGASINS), fetch(URL_REGLES)]);
+            parseMagasins(await resM.text());
+            parseRegles(await resR.text());
+            document.getElementById("loader").style.display = "none";
+            checkMemoire();
+        } catch (e) { document.getElementById("loader").innerText = "❌ Erreur de connexion au Sheet"; }
+    }
+
+    function parseMagasins(csv) {
+        const lines = csv.split('\n');
+        const sel = document.getElementById("selectMagasinConfig");
+        for (let i = 1; i < lines.length; i++) {
+            const c = lines[i].split(',');
+            if (c.length < 5) continue;
+            DB_MAGASINS.push({ id: c[0], nom: c[1], atelier: c[2].toUpperCase().includes("OUI"), agrements: c[3].toUpperCase(), tPetit: c[4], tLourd: c[5] });
+            let opt = document.createElement("option"); opt.value = i-1; opt.text = c[1]; sel.add(opt);
+        }
+    }
+
+    function parseRegles(csv) {
+        const lines = csv.split('\n');
+        const sel = document.getElementById("selectMarque");
+        for (let i = 1; i < lines.length; i++) {
+            const c = lines[i].split(',');
+            if (c.length < 2) continue;
+            DB_REGLES[c[0].trim()] = { std: c[1], atelier: c[2], agrReq: c[3].toUpperCase().trim(), tImp: c[4], force: c[5].toUpperCase().trim(), hot: c[6] };
+            let opt = document.createElement("option"); opt.value = c[0].trim(); opt.text = c[0].trim(); sel.add(opt);
+        }
+    }
+
+    function checkMemoire() {
+        const m = localStorage.getItem("wecheck_mag_idx");
+        if (m !== null) { MAG_INDEX = m; showApp(); } 
+        else { document.getElementById("setupScreen").style.display = "block"; }
+    }
+
+    function saveMagasin() {
+        MAG_INDEX = document.getElementById("selectMagasinConfig").value;
+        localStorage.setItem("wecheck_mag_idx", MAG_INDEX);
+        showApp();
+    }
+
+    function resetMagasin() { localStorage.removeItem("wecheck_mag_idx"); location.reload(); }
+
+    function showApp() {
+        document.getElementById("setupScreen").style.display = "none";
+        document.getElementById("appScreen").style.display = "block";
+        document.getElementById("displayStoreName").innerText = DB_MAGASINS[MAG_INDEX].nom;
+    }
+
+    function startProcess() {
+        MARQUE_SEL = DB_REGLES[document.getElementById("selectMarque").value];
+        if (!MARQUE_SEL) return;
+        document.getElementById("resultat").style.display = "none";
+        if (MARQUE_SEL.tImp) { afficherResultatFinal("IMPOSE"); }
+        else if (MARQUE_SEL.force === "PETIT") { afficherResultatFinal("PETIT"); }
+        else if (MARQUE_SEL.force === "LOURD") { afficherResultatFinal("LOURD"); }
+        else { document.getElementById("choixPoids").style.display = "block"; }
+    }
+
+    function afficherResultatFinal(poids) {
+        document.getElementById("choixPoids").style.display = "none";
+        const mag = DB_MAGASINS[MAG_INDEX];
+        let act = MARQUE_SEL.std;
+        if (MARQUE_SEL.agrReq && mag.agrements.includes(MARQUE_SEL.agrReq)) { act = MARQUE_SEL.atelier; }
+        else if (mag.atelier && !MARQUE_SEL.agrReq) { act = MARQUE_SEL.atelier; }
+        
+        let trans = (poids === "IMPOSE") ? MARQUE_SEL.tImp : (poids === "PETIT" ? mag.tPetit : mag.tLourd);
+        
+        document.getElementById("resAction").innerText = act;
+        document.getElementById("resTransport").innerText = trans;
+        document.getElementById("resHotline").innerText = MARQUE_SEL.hot || "Non renseignée";
+        document.getElementById("resultat").style.display = "block";
+    }
+
+    init();
+</script>
+</body>
+</html>
