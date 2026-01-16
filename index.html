@@ -6,14 +6,15 @@
     <title>WeCheck - SAV National</title>
     <style>
         :root { --primary: #0056b3; --accent: #ffd700; --bg: #f4f6f9; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 15px; color: #333; }
+        .container { max-width: 500px; margin: 0 auto; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
-        h1 { text-align: center; color: var(--primary); margin-bottom: 5px; }
-        select, input { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; box-sizing: border-box; margin-bottom: 10px; }
+        h1 { text-align: center; color: var(--primary); font-size: 1.8rem; margin-bottom: 5px; }
+        input { width: 100%; padding: 14px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; box-sizing: border-box; margin-bottom: 10px; outline: none; }
+        input:focus { border-color: var(--primary); }
         button { width: 100%; background-color: var(--primary); color: white; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
         .store-header { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid var(--primary); display: flex; justify-content: space-between; align-items: center; }
-        .store-name { font-weight: bold; font-size: 1.1rem; color: #2c3e50; }
+        .store-name { font-weight: bold; font-size: 1rem; color: #2c3e50; }
         .change-store { font-size: 0.8rem; text-decoration: underline; color: #666; cursor: pointer; }
         #resultat { display: none; border-top: 5px solid #28a745; animation: slideIn 0.3s ease-out; }
         .action-box { font-size: 1.2rem; font-weight: 800; color: #2c3e50; margin: 15px 0; background: #e8f5e9; padding: 15px; border-radius: 8px; text-align: center; }
@@ -21,32 +22,40 @@
         .icon { font-size: 1.5rem; margin-right: 15px; }
         .weight-options { display: flex; gap: 10px; margin-top: 10px; }
         .weight-btn { flex: 1; padding: 15px; border: 2px solid #ddd; border-radius: 8px; background: white; cursor: pointer; font-weight: bold; }
+        
+        /* Liste de suggestions */
+        .suggestions { border: 1px solid #ddd; border-radius: 8px; background: white; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display: none; margin-top: -10px; }
+        .suggestion-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; }
+        .suggestion-item:hover { background-color: #f0f7ff; }
+
         @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>WeCheck <span style="font-size:0.5em; background:var(--accent); padding:2px 6px; border-radius:4px;">PRO</span></h1>
-    <div id="loader" style="text-align:center; padding:20px;">⏳ Connexion à la base de données...</div>
+    <h1>WeCheck <span style="font-size:0.5em; background:var(--accent); padding:2px 6px; border-radius:4px;">V2</span></h1>
+    <div id="loader" style="text-align:center; padding:20px;">⏳ Connexion aux bases de données...</div>
 
     <div id="setupScreen" class="card" style="display:none;">
-        <h2>📍 Configuration Magasin</h2>
-        <p>Sélectionnez votre magasin :</p>
-        <select id="selectMagasinConfig"></select>
-        <button onclick="saveMagasin()">Valider</button>
+        <h2>📍 Mon Magasin</h2>
+        <p>Tapez votre numéro de magasin :</p>
+        <input type="number" id="inputMagNum" placeholder="Ex: 2, 140, 76..." oninput="rechercherMagasin()">
+        <div id="magFound" style="margin-top:10px; font-weight:bold; color: var(--primary);"></div>
+        <button id="btnSaveMag" onclick="saveMagasin()" style="display:none; margin-top:10px;">Confirmer ce magasin</button>
     </div>
 
     <div id="appScreen" style="display:none;">
         <div class="store-header">
-            <div><div style="font-size:0.8rem; color:#888;">MAGASIN</div><div class="store-name" id="displayStoreName"></div></div>
+            <div><div style="font-size:0.7rem; color:#888;">MAGASIN</div><div class="store-name" id="displayStoreName"></div></div>
             <div class="change-store" onclick="resetMagasin()">Changer</div>
         </div>
 
-        <div class="card">
+        <div class="card" style="position:relative;">
             <label>🔎 <b>Marque du produit :</b></label>
-            <select id="selectMarque"><option value="">-- Choisir une marque --</option></select>
-            <button onclick="startProcess()">Vérifier le process</button>
+            <input type="text" id="marqueInput" placeholder="Tapez les premières lettres..." oninput="filtrerMarques()" autocomplete="off">
+            <div id="marqueSuggestions" class="suggestions"></div>
+            <button onclick="validerSaisieMarque()" id="btnCheck" style="display:none;">Vérifier le process</button>
         </div>
 
         <div id="choixPoids" class="card" style="display:none; text-align:center;">
@@ -58,11 +67,11 @@
         </div>
 
         <div id="resultat" class="card">
-            <h2 id="nomMarqueRes">Procédure</h2>
+            <h2 id="resMarqueTitle" style="color:var(--primary); font-size:1.1rem; border-bottom:1px solid #eee; padding-bottom:5px;"></h2>
             <div class="action-box" id="resAction"></div>
             <div class="info-row"><div class="icon">🚚</div><div><b>Transporteur :</b><br><span id="resTransport"></span></div></div>
             <div class="info-row" id="rowHotline"><div class="icon">📞</div><div><b>Hotline :</b><br><span id="resHotline"></span></div></div>
-            <button onclick="location.reload()" style="background:#666; margin-top:10px;">Nouvelle recherche</button>
+            <button onclick="nouvelleRecherche()" style="background:#666; margin-top:10px;">Nouvelle recherche</button>
         </div>
     </div>
 </div>
@@ -88,26 +97,82 @@
 
     function parseMagasins(csv) {
         const lines = csv.split('\n');
-        const sel = document.getElementById("selectMagasinConfig");
         for (let i = 1; i < lines.length; i++) {
             const c = lines[i].split(',');
             if (c.length < 5) continue;
-            DB_MAGASINS.push({ id: c[0], nom: c[1], atelier: c[2].toUpperCase().includes("OUI"), agrements: c[3].toUpperCase(), tPetit: c[4], tLourd: c[5] });
-            let opt = document.createElement("option"); opt.value = i-1; opt.text = c[1]; sel.add(opt);
+            DB_MAGASINS.push({ id: c[0].trim(), nom: c[1], atelier: c[2].toUpperCase().includes("OUI"), agrements: c[3].toUpperCase(), tPetit: c[4], tLourd: c[5] });
         }
     }
 
     function parseRegles(csv) {
         const lines = csv.split('\n');
-        const sel = document.getElementById("selectMarque");
         for (let i = 1; i < lines.length; i++) {
             const c = lines[i].split(',');
             if (c.length < 2) continue;
-            DB_REGLES[c[0].trim()] = { std: c[1], atelier: c[2], agrReq: c[3].toUpperCase().trim(), tImp: c[4], force: c[5].toUpperCase().trim(), hot: c[6] };
-            let opt = document.createElement("option"); opt.value = c[0].trim(); opt.text = c[0].trim(); sel.add(opt);
+            let m = c[0].trim();
+            DB_REGLES[m] = { nom: m, std: c[1], atelier: c[2], agrReq: c[3].toUpperCase().trim(), tImp: c[4], force: c[5].toUpperCase().trim(), hot: c[6] };
         }
     }
 
+    // --- RECHERCHE MAGASIN PAR NUMÉRO ---
+    function rechercherMagasin() {
+        const num = document.getElementById("inputMagNum").value;
+        const index = DB_MAGASINS.findIndex(m => parseInt(m.id) === parseInt(num));
+        const infoDiv = document.getElementById("magFound");
+        const btn = document.getElementById("btnSaveMag");
+
+        if (index !== -1) {
+            const mag = DB_MAGASINS[index];
+            infoDiv.innerText = "✅ Magasin trouvé : " + mag.nom;
+            btn.style.display = "block";
+            btn.dataset.index = index;
+        } else {
+            infoDiv.innerText = num ? "❌ Aucun magasin avec ce numéro" : "";
+            btn.style.display = "none";
+        }
+    }
+
+    // --- FILTRAGE DES MARQUES (INTUITIF) ---
+    function filtrerMarques() {
+        const input = document.getElementById("marqueInput").value.toUpperCase();
+        const suggBox = document.getElementById("marqueSuggestions");
+        suggBox.innerHTML = "";
+        
+        if (input.length < 2) { 
+            suggBox.style.display = "none"; 
+            document.getElementById("btnCheck").style.display = "none";
+            return; 
+        }
+
+        const marques = Object.keys(DB_REGLES).filter(m => m.includes(input));
+
+        if (marques.length > 0) {
+            suggBox.style.display = "block";
+            marques.forEach(m => {
+                let div = document.createElement("div");
+                div.className = "suggestion-item";
+                div.innerText = m;
+                div.onclick = () => selectionnerMarque(m);
+                suggBox.appendChild(div);
+            });
+        } else {
+            suggBox.style.display = "none";
+        }
+    }
+
+    function selectionnerMarque(nom) {
+        document.getElementById("marqueInput").value = nom;
+        document.getElementById("marqueSuggestions").style.display = "none";
+        document.getElementById("btnCheck").style.display = "block";
+        MARQUE_SEL = DB_REGLES[nom];
+    }
+
+    function validerSaisieMarque() {
+        document.getElementById("btnCheck").style.display = "none";
+        startProcess();
+    }
+
+    // --- LOGIQUE CORE ---
     function checkMemoire() {
         const m = localStorage.getItem("wecheck_mag_idx");
         if (m !== null) { MAG_INDEX = m; showApp(); } 
@@ -115,7 +180,7 @@
     }
 
     function saveMagasin() {
-        MAG_INDEX = document.getElementById("selectMagasinConfig").value;
+        MAG_INDEX = document.getElementById("btnSaveMag").dataset.index;
         localStorage.setItem("wecheck_mag_idx", MAG_INDEX);
         showApp();
     }
@@ -129,9 +194,10 @@
     }
 
     function startProcess() {
-        MARQUE_SEL = DB_REGLES[document.getElementById("selectMarque").value];
         if (!MARQUE_SEL) return;
         document.getElementById("resultat").style.display = "none";
+        document.getElementById("resMarqueTitle").innerText = "Process pour : " + MARQUE_SEL.nom;
+        
         if (MARQUE_SEL.tImp) { afficherResultatFinal("IMPOSE"); }
         else if (MARQUE_SEL.force === "PETIT") { afficherResultatFinal("PETIT"); }
         else if (MARQUE_SEL.force === "LOURD") { afficherResultatFinal("LOURD"); }
@@ -151,6 +217,13 @@
         document.getElementById("resTransport").innerText = trans;
         document.getElementById("resHotline").innerText = MARQUE_SEL.hot || "Non renseignée";
         document.getElementById("resultat").style.display = "block";
+    }
+
+    function nouvelleRecherche() {
+        document.getElementById("resultat").style.display = "none";
+        document.getElementById("marqueInput").value = "";
+        document.getElementById("btnCheck").style.display = "none";
+        MARQUE_SEL = null;
     }
 
     init();
